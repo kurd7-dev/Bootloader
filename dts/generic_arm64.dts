@@ -1,0 +1,77 @@
+/dts-v1/;
+
+/{
+    model = "Generic ARM64";
+    compatible = "generic,arm64";
+
+    aliases {
+        serial0 = &uart0;
+        mmc0 = &mmc0;
+    };
+
+    chosen {
+        stdout-path = "serial0:115200n8";
+        bootargs = "console=ttyAMA0,115200 androidboot.hardware=generic_arm64";
+    };
+
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        cpu@0 {
+            device_type = "cpu";
+            compatible = "arm,cortex-a72";
+            reg = <0>;
+            enable-method = "psci";
+        };
+
+        cpu@1 {
+            device_type = "cpu";
+            compatible = "arm,cortex-a72";
+            reg = <1>;
+            enable-method = "psci";
+        };
+    };
+
+    memory@0 {
+        device_type = "memory";
+        reg = <0 0x80000000 0 0x40000000>;  /* 1GB RAM at 2GB */
+    };
+
+    psci {
+        compatible = "arm,psci-1.0";
+        method = "smc";
+    };
+
+    uart0: serial@9000000 {
+        compatible = "arm,pl011";
+        reg = <0 0x9000000 0 0x1000>;
+        clock-frequency = <24000000>;
+        clocks = <&uart_clk>;
+        interrupts = <33>;
+    };
+
+    uart_clk: clock {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <24000000>;
+    };
+
+    mmc0: mmc@1c0f0000 {
+        compatible = "arasan,sdhci-5.1";
+        reg = <0 0x1c0f0000 0 0x100>;
+        interrupts = <113>;
+        clocks = <&sdhci_clk>;
+        clock-names = "clk_xin";
+        clock-frequency = <200000000>;
+        bus-width = <8>;
+        non-removable;
+        status = "okay";
+    };
+
+    sdhci_clk: clock-sdhci {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <200000000>;
+    };
+};
