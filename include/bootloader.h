@@ -3,14 +3,13 @@
 
 #include "types.h"
 
-#define BOOTLOADER_BASE_ADDR   0x40000000ULL
-#define KERNEL_RUNTIME_ADDR    0x52000000ULL
-#define DTB_FALLBACK_ADDR      0x42000000ULL
-#define QEMU_UART_BASE         0x09000000ULL
+#include "generated/autoconf.h"
 
-#define DEFAULT_BOOTARGS \
-    "console=ttyAMA0,115200 earlycon=pl011,0x09000000 " \
-    "loglevel=8 ignore_loglevel panic=3 oops=panic"
+#define BOOTLOADER_BASE_ADDR   CONFIG_BOOTLOADER_BASE
+#define KERNEL_RUNTIME_ADDR    CONFIG_KERNEL_RUNTIME_ADDR
+#define DTB_FALLBACK_ADDR      CONFIG_DTB_FALLBACK_ADDR
+
+#define DEFAULT_BOOTARGS CONFIG_DEFAULT_BOOTARGS
 
 typedef struct {
     bool uart_ready;

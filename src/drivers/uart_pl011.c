@@ -1,6 +1,7 @@
 #include "drivers/uart_pl011.h"
+#include "generated/autoconf.h"
+#include "mmio.h"
 
-#define UART_BASE  0x09000000ULL
 #define UART_DR    (UART_BASE + 0x000)
 #define UART_FR    (UART_BASE + 0x018)
 #define UART_IBRD  (UART_BASE + 0x024)
@@ -13,11 +14,39 @@
 
 static bool g_uart_ready;
 
+static void uart_gpio_init_if_needed(void)
+{
+#if CONFIG_TARGET_RPI3
+    u32 ra;
+
+    ra = readl(GPFSEL1);
+    ra &= ~((7U << 12) | (7U << 15));
+    ra |=  (4U << 12) | (4U << 15); /* GPIO14/15 -> ALT0 (TXD0/RXD0) */
+    writel(ra, GPFSEL1);
+
+    writel(0, GPPUD);
+    for (volatile u32 i = 0; i < 150; i++) { __asm__ volatile("nop"); }
+    writel((1U << 14) | (1U << 15), GPPUDCLK0);
+    for (volatile u32 i = 0; i < 150; i++) { __asm__ volatile("nop"); }
+    writel(0, GPPUDCLK0);
+#endif
+}
+
 void uart_pl011_init(void)
 {
+    u32 baud_div;
+    u32 rem;
+    u32 frac;
+
+    uart_gpio_init_if_needed();
+
+    baud_div = (u32)(CONFIG_UART_CLOCK_HZ / (16U * 115200U));
+    rem = (u32)(CONFIG_UART_CLOCK_HZ % (16U * 115200U));
+    frac = (u32)(((rem * 64U) + (115200U / 2U)) / 115200U);
+
     writel(0x0, UART_CR);
-    writel(13, UART_IBRD);
-    writel(1, UART_FBRD);
+    writel(baud_div, UART_IBRD);
+    writel(frac, UART_FBRD);
     writel(0x70, UART_LCRH);
     writel(0x301, UART_CR);
     g_uart_ready = true;

@@ -3,6 +3,15 @@
 .global _start
 
 _start:
+    /* Park secondary cores */
+    mrs x1, mpidr_el1
+    and x1, x1, #0x3
+    cbz x1, 0f
+1:
+    wfe
+    b 1b
+0:
+
     /* Save incoming DTB pointer from x0 */
     mov x19, x0
 
@@ -28,6 +37,9 @@ _start:
     ldr x0, =vector_table
     msr VBAR_EL1, x0
     isb
+
+    /* Early UART init */
+    bl uart_pl011_init
 
     bl bootloader_main
 

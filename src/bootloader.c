@@ -3,6 +3,13 @@
 #include "drivers/dtb.h"
 #include "drivers/uart_pl011.h"
 #include "lib/string.h"
+#include "mmio.h"
+
+#define PM_BASE        (MMIO_PERIPH_BASE + 0x00100000ULL)
+#define PM_RSTC        (PM_BASE + 0x1c)
+#define PM_WDOG        (PM_BASE + 0x24)
+#define PM_PASSWORD    0x5a000000U
+#define PM_RSTC_WRCFG_FULL_RESET 0x00000020U
 
 volatile u64 g_incoming_dtb_ptr;
 
@@ -115,6 +122,13 @@ void boot_panic_halt(const char *msg)
 
 void boot_reset(void)
 {
+#if CONFIG_TARGET_RPI3
+    writel(PM_PASSWORD | 10U, PM_WDOG);
+    writel(PM_PASSWORD | PM_RSTC_WRCFG_FULL_RESET, PM_RSTC);
+    for (;;) {
+        __asm__ volatile("wfe");
+    }
+#else
     /* PSCI SYSTEM_RESET: fid=0x84000009 */
     register u64 x0 __asm__("x0") = 0x84000009ULL;
     register u64 x1 __asm__("x1") = 0;
@@ -122,6 +136,7 @@ void boot_reset(void)
     register u64 x3 __asm__("x3") = 0;
     __asm__ volatile("smc #0" : "+r"(x0) : "r"(x1), "r"(x2), "r"(x3) : "x4", "x5", "x6", "x7", "memory");
     boot_panic_halt("reset failed");
+#endif
 }
 
 void boot_jump_to_kernel(u64 kernel_addr, u64 dtb_addr)

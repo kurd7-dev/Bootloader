@@ -25,3 +25,5 @@ __pycache__/
 build/
 out/
 bootloader
+.config
+include/generated/

@@ -1,0 +1,6 @@
+# Raspberry Pi 3 firmware config for this bootloader
+
+arm_64bit=1
+kernel=kernel8.img
+enable_uart=1
+dtoverlay=disable-bt

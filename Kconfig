@@ -1,0 +1,60 @@
+menu "Bootloader configuration"
+
+choice
+    prompt "Target board"
+    default TARGET_QEMU_VIRT
+
+config TARGET_QEMU_VIRT
+    bool "QEMU virt (AArch64)"
+
+config TARGET_RPI3
+    bool "Raspberry Pi 3 (AArch64)"
+
+endchoice
+
+config BOOTLOADER_BASE
+    hex "Bootloader link address"
+    default 0x40000000 if TARGET_QEMU_VIRT
+    default 0x00080000 if TARGET_RPI3
+
+config KERNEL_RUNTIME_ADDR
+    hex "Kernel runtime load address"
+    default 0x52000000 if TARGET_QEMU_VIRT
+    default 0x00280000 if TARGET_RPI3
+
+config DTB_FALLBACK_ADDR
+    hex "Fallback DTB address"
+    default 0x42000000 if TARGET_QEMU_VIRT
+    default 0x02600000 if TARGET_RPI3
+
+config UART_BASE
+    hex "PL011 UART base"
+    default 0x09000000 if TARGET_QEMU_VIRT
+    default 0x3F201000 if TARGET_RPI3
+
+config UART_CLOCK_HZ
+    int "PL011 UART clock"
+    default 24000000 if TARGET_QEMU_VIRT
+    default 48000000 if TARGET_RPI3
+
+config PERIPH_BASE
+    hex "Peripheral base"
+    default 0x00000000 if TARGET_QEMU_VIRT
+    default 0x3F000000 if TARGET_RPI3
+
+config OUTPUT_IMAGE
+    string "Output image filename"
+    default "bootloader.bin" if TARGET_QEMU_VIRT
+    default "kernel8.img" if TARGET_RPI3
+
+config DEFAULT_BOOTARGS
+    string "Default bootargs"
+    default "console=ttyAMA0,115200 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel panic=3 oops=panic" if TARGET_QEMU_VIRT
+    default "console=ttyAMA0,115200 earlycon loglevel=8 panic=3" if TARGET_RPI3
+
+config ENABLE_QEMU_RUN_TARGET
+    bool "Enable make run for QEMU"
+    default y if TARGET_QEMU_VIRT
+    default n if TARGET_RPI3
+
+endmenu

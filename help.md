@@ -1,198 +1,249 @@
-Recreate my ARM64 Android bootloader project from scratch in a clean, organized way.
+Recreate my ARM64 Android-style bootloader project, but target Raspberry Pi 3 instead of QEMU `virt`.
 
 Project goal:
-Build a custom ARM64 bootloader for QEMU `virt` that can load and boot an Android/Linux kernel image, provide an interactive shell, track boot failures, and support recovery-style fallback logic.
+Build a custom ARM64 bootloader for Raspberry Pi 3 that can load and boot a Linux/Android-style kernel image, provide an interactive shell, track boot failures, and support recovery-style fallback logic.
 
 IMPORTANT:
 - Do NOT implement ramdisk support for now.
-- Do NOT require a real Android initramfs.
-- Do NOT depend on recovery ramdisk, boot ramdisk, or GSI system images yet.
-- Focus only on the bootloader core and kernel boot flow.
-- Keep the architecture modular and easy to extend later.
+- Do NOT depend on Android initramfs or recovery images yet.
+- Focus on bootloader core + kernel boot flow.
+- Keep architecture modular and extendable.
+- This must be Raspberry Pi 3 specific, NOT generic ARM64.
 
 Target environment:
-- QEMU `virt`
-- ARM64 / AArch64
-- UART console using PL011
-- Kernel passed as a raw `Image` or embedded kernel blob
+- Board: Raspberry Pi 3 Model B / B+
+- Architecture: ARM64 / AArch64
+- Boot method: Raspberry Pi firmware loads `kernel8.img`
+- UART: PL011 via GPIO (115200)
+- Kernel format: raw `Image` (no ramdisk yet)
 - DTB support required
-- Memory size default: 2048 MB
+- Memory: assume standard Pi 3 layout
+
+---
+
+CHANGES FROM QEMU VERSION (VERY IMPORTANT):
+- Remove ALL QEMU assumptions (`virt` machine, 0x09000000 UART, etc.)
+- Replace with Raspberry Pi 3 MMIO addresses and peripherals
+- Replace QEMU boot flow with Pi firmware → kernel8.img flow
+- Entry point is `_start` in `kernel8.img`, not QEMU loader
+
+---
 
 Main features to implement:
-1. ARM64 low-level entry in assembly
-   - set up stack
-   - save incoming DTB pointer from x0
-   - initialize UART
-   - jump into C main()
-   - basic exception vector table
-   - simple panic halt / reboot support
 
-2. UART console
-   - PL011 UART driver
+1. ARM64 low-level entry (assembly)
+   - entry from Pi firmware
+   - set up stack
+   - park secondary cores
+   - clear .bss
+   - preserve incoming DTB pointer (x0)
+   - initialize UART (Pi 3 specific)
+   - jump into C main()
+
+2. UART console (Pi 3 specific)
+   - PL011 UART driver using Pi 3 MMIO base
+   - configure GPIO pins for UART
    - putchar / getchar
-   - non-blocking getchar for shell timeout
    - logging helpers
 
 3. Bootloader shell
    - prompt
    - command parsing
    - history
-   - basic line editing
+   - line editing (basic)
    - autoboot timeout
-   - `help`
-   - `history`
-   - `!!`
-   - `reset`
+   - commands:
+     - help
+     - history
+     - !!
+     - reset
 
 4. Environment variable subsystem
-   - in-memory only for now
+   - in-memory only
    - commands:
-     - `printenv`
-     - `setenv`
-     - `run`
-     - `saveenv` (stub only, print message)
+     - printenv
+     - setenv
+     - run
+     - saveenv (stub)
    - bootdelay support
 
 5. Boot image / kernel loading
-   - For now, support either:
+   - support:
      A) embedded raw kernel `Image`
-     OR
-     B) a simple embedded legacy Android-style boot image header containing only kernel info
-   - No ramdisk loading yet
-   - Copy kernel to runtime address
-   - choose DTB from:
-     1) incoming x0 DTB
+     B) simple embedded boot image header (kernel only)
+   - copy kernel to runtime address
+   - DTB selection:
+     1) incoming x0 DTB (from firmware)
      2) embedded DTB
-     3) fallback DTB address
+     3) fallback address
    - patch DTB `/chosen/bootargs`
-   - jump to kernel with ARM64 Linux boot ABI:
+   - jump to kernel using ARM64 Linux ABI:
      - x0 = dtb pointer
      - x1 = 0
      - x2 = 0
      - x3 = 0
 
 6. Boot arguments
-   - default bootargs:
-     `console=ttyAMA0,115200 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel panic=3 oops=panic`
-   - allow overriding through env var `bootargs`
-   - patch DTB with the selected bootargs before boot
+   - default:
+     console=ttyAMA0,115200 earlycon loglevel=8 panic=3
+   - override via env var `bootargs`
+   - patch DTB before boot
 
-7. Boot state / failure detector
+7. Boot state / failure detection
    - track:
      - boot_in_progress
      - boot_success
      - fail_count
      - fail_limit
      - mode
-   - volatile backend only for now
+   - in-memory backend
    - commands:
-     - `bootstate`
-     - `bootsuccess`
+     - bootstate
+     - bootsuccess
    - if fail_count >= fail_limit:
-     - enter recovery menu mode (menu only for now; no ramdisk boot yet)
+     - enter recovery menu
 
 8. Recovery menu framework
-   - keyboard-driven menu with:
-     - try normal boot
+   - simple keyboard-driven menu over UART
+   - options:
+     - normal boot
      - reboot
-     - factory reset hook (stub only)
-   - no real recovery kernel or ramdisk yet
-   - just implement framework and commands cleanly
+     - factory reset (stub)
+   - no real recovery image yet
 
-9. Boot monitor / debug output
-   - BIOS-like stage logs:
-     - `[ OK ] UART initialized`
-     - `[ OK ] DTB selected`
-     - `[ OK ] Kernel copied`
-     - etc.
-   - keep logs readable
+9. Boot monitor logs
+   - print clear logs:
+     [ OK ] UART initialized
+     [ OK ] DTB selected
+     [ OK ] Kernel loaded
 
 10. Driver info command
-   - `drvinfo`
-   - print status of:
-     - UART
-     - DTB
-     - kernel blob presence
+   - drvinfo
+   - print:
+     - UART status
+     - DTB presence
+     - kernel presence
      - boot state backend
 
-11. Clean repository structure
-Create a maintainable structure like:
-- `src/arch/arm64_boot.s`
-- `src/bootloader.c`
-- `src/commands.c`
-- `src/env.c`
-- `src/bootstate.c`
-- `src/drivers/uart_pl011.c`
-- `src/drivers/dtb.c`
-- `src/lib/string.c`
-- `include/bootloader.h`
-- `include/bootloader_ext.h`
-- `include/drivers/uart_pl011.h`
-- `boot/` for embedded blobs
-- `tools/` for helper scripts
-- `Makefile`
-- `linker.ld`
-- `README.md`
+---
 
-12. Build system
-   - GNU Make
-   - cross compile with:
-     - `aarch64-linux-gnu-gcc`
-     - `aarch64-linux-gnu-as`
-     - `aarch64-linux-gnu-ld`
-   - build target:
-     - `make`
-   - run target:
-     - `make run`
-   - QEMU run command should use:
-     - `qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 2048 -nographic -kernel bootloader`
-   - add `make clean`
+Raspberry Pi 3 specific requirements:
 
-13. Configuration
-   - default addresses:
-     - bootloader base: `0x40000000`
-     - kernel runtime load: `0x52000000`
-     - DTB fallback: `0x42000000`
-   - keep these in headers / config constants
+- Output binary must be:
+  kernel8.img
 
-14. Stubs to prepare future work
-Add clean placeholder APIs for future expansion:
-- persistent bootstate backend
-- ramdisk support
-- GPT / partition loading
+- Use Raspberry Pi 3 peripheral base address:
+  (define properly in mmio.h)
+
+- UART must use PL011 with GPIO configuration
+
+- Provide config.txt.example:
+  enable_uart=1
+  dtoverlay=disable-bt
+
+- Document UART pins:
+  TX: GPIO14 (pin 8)
+  RX: GPIO15 (pin 10)
+
+---
+
+Project structure (same as original but adapted):
+
+- src/arch/arm64_boot.s
+- src/bootloader.c
+- src/commands.c
+- src/env.c
+- src/bootstate.c
+- src/drivers/uart_pl011.c
+- src/drivers/dtb.c
+- src/lib/string.c
+- include/*
+- boot/
+- tools/
+- Makefile
+- linker.ld
+- README.md
+
+---
+
+Build system:
+
+- GNU Make
+- toolchain:
+  aarch64-none-elf-gcc (preferred)
+  OR aarch64-linux-gnu-gcc (fallback)
+
+- build target:
+  make → kernel8.img
+
+- DO NOT use QEMU run target
+- Instead document how to copy kernel8.img to SD card
+
+---
+
+Linker / memory:
+
+- define Pi 3 load address (firmware loads kernel8.img)
+- define:
+  bootloader base
+  kernel load address
+  DTB fallback address
+
+---
+
+Stubs for future work (same as original):
+- persistent bootstate
+- ramdisk
+- GPT / partitions
 - fastboot
-- framebuffer / splash screen
+- framebuffer
 - USB
-- filesystem loading
-But do NOT implement them now.
+- filesystem
 
-15. Documentation
-Write a clear README describing:
-- current implemented features
-- current limitations
-- build commands
-- run commands
-- shell commands
-- future roadmap
+Do NOT implement them yet.
+
+---
+
+Documentation:
+
+README must include:
+- how Pi 3 boot flow works
+- how kernel8.img is loaded
+- how to build
+- how to copy to SD card
+- how to wire UART
+- how to test using serial console
+- limitations vs QEMU version
+
+---
 
 Behavior requirements:
+
 - must compile cleanly
-- avoid unnecessary complexity
-- keep code readable
-- keep functions small
-- organize for extension
-- do not include fake Android userspace or ramdisk logic yet
+- no generic ARM placeholders
+- must be Pi 3 specific
+- code must be real, not pseudo
+- keep modular and extendable
+
+---
 
 What I want from you:
-1. Create the full project files
-2. Implement the bootloader core
-3. Implement the shell and bootstate logic
-4. Implement DTB bootargs patching
-5. Implement the Makefile and linker script
-6. Add README
-7. Make sure `make` and `make run` are wired correctly
 
-Do not add ramdisk support yet.
-Do not add TWRP/GSI logic yet.
-Do not add Samsung-specific recovery logic yet.
-Just rebuild the clean bootloader core with the features above.
+1. Convert the existing QEMU design into Raspberry Pi 3 version
+2. Replace all QEMU assumptions with Pi 3 hardware
+3. Implement working UART for Pi 3
+4. Keep shell + bootstate + DTB logic
+5. Output kernel8.img
+6. Provide full project structure
+7. Provide README + config.txt example
+
+---
+
+Do NOT:
+- keep QEMU-specific addresses
+- use generic ARM placeholders
+- assume virt machine
+- implement ramdisk yet
+
+Focus on:
+Raspberry Pi 3 + real hardware bootloader + UART debug + kernel loading core
