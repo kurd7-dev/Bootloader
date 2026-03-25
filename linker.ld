@@ -1,43 +1,47 @@
-/*
- * Linker script for ARM64 bootloader
- */
-
 ENTRY(_start)
 
 SECTIONS
 {
-    . = 0x80000000;
-    
-    .text : {
-        *(.text.start)
-        *(.text)
-        *(.text.*)
+    . = 0x40000000;
+
+    .text : ALIGN(16) {
+        KEEP(*(.text.boot))
+        KEEP(*(.text.vectors))
+        *(.text*)
     }
-    
-    .rodata : {
-        *(.rodata)
-        *(.rodata.*)
+
+    .rodata : ALIGN(16) {
+        *(.rodata*)
     }
-    
-    .data : {
-        *(.data)
+
+    .kernel_blob : ALIGN(8) {
+        __kernel_blob_start = .;
+        KEEP(*(.kernel_blob))
+        __kernel_blob_end = .;
     }
-    
-    .bss : {
+
+    .dtb_blob : ALIGN(8) {
+        __dtb_blob_start = .;
+        KEEP(*(.dtb_blob))
+        __dtb_blob_end = .;
+    }
+
+    .data : ALIGN(16) {
+        *(.data*)
+    }
+
+    .bss (NOLOAD) : ALIGN(16) {
         __bss_start = .;
-        *(.bss)
-        *(.bss.*)
+        *(.bss*)
+        *(COMMON)
         __bss_end = .;
     }
-    
-    .stack : {
+
+    .stack (NOLOAD) : ALIGN(16) {
         _stack_bottom = .;
-        . += 4096;
+        . += 0x8000;
         _stack_top = .;
     }
-    
-    .vectors : {
-        _vectors = .;
-        *(.vectors)
-    }
+
+    /DISCARD/ : { *(.comment) *(.note*) }
 }

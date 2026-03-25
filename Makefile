@@ -1,42 +1,46 @@
-# Custom ARM64 Bootloader Makefile
+# ARM64 bootloader Makefile (QEMU virt)
 
 CROSS_COMPILE ?= aarch64-linux-gnu-
-CC = $(CROSS_COMPILE)gcc
-AS = $(CROSS_COMPILE)as
-LD = $(CROSS_COMPILE)ld
-OBJCOPY = $(CROSS_COMPILE)objcopy
+CC      := $(CROSS_COMPILE)gcc
+LD      := $(CROSS_COMPILE)ld
+OBJCOPY := $(CROSS_COMPILE)objcopy
 
-CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles
-ASFLAGS = -march=armv8-a
-LDFLAGS = -T linker.ld
+BUILD_DIR := build
+TARGET_ELF := bootloader
+TARGET_BIN := bootloader.bin
 
-SRC_DIR = src
-INC_DIR = include
-BUILD_DIR = build
+CFLAGS := -Wall -Wextra -Werror -std=c11 -O2 \
+	-ffreestanding -fno-stack-protector -fno-builtin -fno-pic \
+	-mcpu=cortex-a72 -mgeneral-regs-only -nostdlib -nostartfiles \
+	-Iinclude
 
-SRCS = $(wildcard $(SRC_DIR)/*.c)
-ASMS = $(wildcard $(SRC_DIR)/*.s)
-OBJS = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS)) \
-       $(patsubst $(SRC_DIR)/%.s, $(BUILD_DIR)/%.o, $(ASMS))
+ASFLAGS := -D__ASSEMBLY__
+LDFLAGS := -T linker.ld -nostdlib
 
-TARGET = bootloader.bin
+RWILDCARD = $(wildcard $(1)/*.c) $(wildcard $(1)/*.s) $(foreach d,$(wildcard $(1)/*),$(call RWILDCARD,$(d)))
+SOURCES := $(call RWILDCARD,src)
+OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(patsubst %.s,$(BUILD_DIR)/%.o,$(SOURCES)))
 
-.PHONY: all clean
+.PHONY: all clean run
 
-all: $(TARGET)
+all: $(TARGET_ELF) $(TARGET_BIN)
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(INC_DIR) -c $< -o $@
+$(BUILD_DIR)/%.o: %.s
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(ASFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.s | $(BUILD_DIR)
-	$(AS) $(ASFLAGS) $< -o $@
+$(TARGET_ELF): $(OBJECTS) linker.ld
+	$(LD) $(LDFLAGS) -o $@ $(OBJECTS)
 
-$(TARGET): $(OBJS) linker.ld
-	$(LD) $(LDFLAGS) $(OBJS) -o bootloader.elf
-	$(OBJCOPY) -O binary bootloader.elf $(TARGET)
+$(TARGET_BIN): $(TARGET_ELF)
+	$(OBJCOPY) -O binary $< $@
+
+run: $(TARGET_ELF)
+	qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 2048 -nographic -kernel $(TARGET_ELF)
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET) bootloader.elf
+	rm -rf $(BUILD_DIR) $(TARGET_ELF) $(TARGET_BIN)
