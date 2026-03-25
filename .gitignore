@@ -22,4 +22,6 @@ __pycache__/
 *.iml
 *.sln
 *.suo
-
+build/
+out/
+bootloader
